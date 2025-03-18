@@ -1,32 +1,22 @@
 const express = require("express");
-const Payment = require("../models/Payment");
+const db = require("../db");
 
 const router = express.Router();
 
-// Insecure Payment Processing
-router.post("/", async (req, res) => {
-    const { amount } = req.body;
+router.post("/pay", (req, res) => {
+    const { userId, amount } = req.body;
 
-    // 🚨 NO authentication check! Anyone can initiate a payment
-    if (!amount) return res.status(400).json({ message: "Amount is required" });
-
-    const payment = new Payment({ amount, status: "Pending" });
-    await payment.save();
-
-    res.json({ message: "Payment initiated", id: payment._id });
+    db.run(`INSERT INTO transactions (user_id, amount, status) VALUES (?, ?, ?)`, [userId, amount, "pending"], function (err) {
+        if (err) return res.status(500).json({ error: "Transaction failed" });
+        res.json({ message: "Payment initiated", transactionId: this.lastID });
+    });
 });
 
-// 🚨 Users can manually mark payment as success (no authentication check)
-router.post("/confirm", async (req, res) => {
-    const { paymentId } = req.body;
-
-    const payment = await Payment.findById(paymentId);
-    if (!payment) return res.status(404).json({ message: "Payment not found" });
-
-    payment.status = "Success"; // 🚨 No validation on who is confirming it!
-    await payment.save();
-
-    res.json({ message: "Payment confirmed!" });
+router.get("/transactions/:userId", (req, res) => {
+    db.all(`SELECT * FROM transactions WHERE user_id = ?`, [req.params.userId], (err, transactions) => {
+        if (err) return res.status(500).json({ error: "Error fetching transactions" });
+        res.json({ transactions });
+    });
 });
 
 module.exports = router;
